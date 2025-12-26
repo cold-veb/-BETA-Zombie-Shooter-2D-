@@ -107,10 +107,11 @@ let weapons={
   "ICE Gun": {delay:0.5, bullets:3, spread:false, price:599, owned:false}
 };
 let currentWeapon="Pistol",lastShot=0,autoFireQueue=[];
-let taskData={
-  t1: false,t2:false,t3:false
-};
+let taskData={t1:false,t2:false,t3:false};
 let lastTaskUpdate=Date.now();
+
+// Флаг открытия сундуков
+let chestOpened = {normal:false, medium:false, legend:false};
 
 /* ===== ИГРА ===== */
 function startGame(){
@@ -166,11 +167,12 @@ function claimRewards(){
     if(taskData.t3===false && kills>=1000){coins+=500;taskData.t3=true;}
     updateTasks();updateMenu();
 }
-setInterval(()=>{taskData={t1:false,t2:false,t3:false};updateTasks();},25*60*1000);
 
 /* ===== СУНДУКИ ===== */
 function openChest(type){
-    if(!taskData.t1 && !taskData.t2 && !taskData.t3){alert("Сначала выполните все задания!"); return;}
+    if(chestOpened[type]) { alert("Вы уже открыли этот сундук!"); return; }
+    if(!taskData.t1 || !taskData.t2 || !taskData.t3){alert("Сначала выполните все задания!"); return;}
+
     let chance=Math.random()*100, reward=0;
     if(type==="normal"){
         if(chance<75) reward=35; else if(chance<90) reward=80; else if(chance<99) reward=120; else reward=200;
@@ -179,15 +181,27 @@ function openChest(type){
     }else{
         if(chance<91) reward=100; else if(chance<96) reward=250; else if(chance<99) reward=500; else if(chance<99.99) reward=1000; else reward=100000;
     }
-    coins+=reward; document.getElementById("chestResult").innerText=`Вы получили ${reward} монет!`;
+    coins+=reward; 
+    document.getElementById("chestResult").innerText=`Вы получили ${reward} монет!`;
+    chestOpened[type] = true;
     updateMenu();
 }
 
+// сброс заданий и сундуков каждые 25 минут
+setInterval(()=>{
+    taskData={t1:false,t2:false,t3:false};
+    chestOpened={normal:false, medium:false, legend:false};
+    updateTasks();
+},25*60*1000);
+
 /* ===== КНОПКИ ===== */
-function updateMenu(){document.getElementById("menuCoins").innerText="💰 "+coins;document.getElementById("menuStats").innerText=`Убийств всего: ${kills}`;}
+function updateMenu(){
+    document.getElementById("menuCoins").innerText="💰 "+coins;
+    document.getElementById("menuStats").innerText=`Убийств всего: ${kills}`;
+}
 
 /* ===== СПАВН ЗОМБИ ===== */
-function spawnZombie(){zombies.push({x:Math.random()*(canvas.width-40),y:-40,hp:1});} // hp добавлен
+function spawnZombie(){zombies.push({x:Math.random()*(canvas.width-40),y:-40,hp:1});}
 
 /* ===== ВВОД ===== */
 canvas.addEventListener("mousedown", shoot);
