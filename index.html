@@ -62,7 +62,7 @@ const ctx = canvas.getContext("2d");
 function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
 resize(); addEventListener("resize",resize);
 
-let state="menu", zombies=[], bullets=[], kills=0, chests=[];
+let state="menu", zombies=[], bullets=[], kills=0, chests=[], bags=[];
 let coins=Number(localStorage.getItem("coins"))||0;
 let totalKills=Number(localStorage.getItem("totalKills"))||0;
 
@@ -72,14 +72,18 @@ let currentMode="standard";
 
 // === ОРУЖИЕ ===
 let weapons = {
-  "Pistol": {delay:0.8, bullets:1, spread:false, owned:true, price:0},
-  "Tek-9": {delay:0.5, bullets:2, spread:false, owned:false, price:200},
-  "Shotgun": {delay:1, bullets:5, spread:true, owned:false, price:350},
-  "UMP": {delay:0.6, bullets:3, spread:true, owned:false, price:1000}
+  "Pistol": {delay:0.8, bullets:1, spread:false, owned:true, price:0, ammo:13, maxAmmo:13},
+  "Tek-9": {delay:0.5, bullets:2, spread:false, owned:false, price:200, ammo:13, maxAmmo:13},
+  "Shotgun": {delay:1, bullets:5, spread:true, owned:false, price:350, ammo:8, maxAmmo:8},
+  "UMP": {delay:0.6, bullets:3, spread:true, owned:false, price:1000, ammo:15, maxAmmo:15}
 };
 let currentWeapon="Pistol", lastShot=0;
+let reloading=false, reloadTime=3000, reloadStart=0;
 
 let baseHP = 250;
+
+// === ЗАДАНИЯ ===
+let lastClaim = Number(localStorage.getItem("lastClaim")) || 0;
 
 // === МЕНЮ ===
 function hideAll(){
@@ -106,7 +110,15 @@ function updateTasks(){
   task2.innerText=Math.min(totalKills,200)+"/200";
   task3.innerText=Math.min(totalKills,1000)+"/1000";
 }
-function claimRewards(){coins += 50; saveProgress(); updateMenu(); alert("Награда получена!");}
+function claimRewards(){
+  let now = Date.now();
+  if(now - lastClaim < 30*60*1000) return alert("Награду можно получить через 30 минут");
+  coins += 50;
+  lastClaim = now;
+  localStorage.setItem("lastClaim", lastClaim);
+  saveProgress(); updateMenu();
+  alert("Награда получена!");
+}
 
 // === МАГАЗИН ===
 function updateShop(){
@@ -129,14 +141,15 @@ function buyEquip(w){
   updateShop(); updateMenu(); saveProgress();
 }
 
-// === СПАВН ЗОМБИ И СУНДУКОВ ===
+// === СПАВН ЗОМБИ, СУНДУКОВ, МЕШКОВ ===
 function spawnZombie(){ zombies.push({x:Math.random()*(canvas.width-40),y:-40,hp:1}); }
 function spawnChest(){ if(Math.random()<0.001 && chests.length<3) chests.push({x:Math.random()*(canvas.width-40),y:-40,size:25}); }
+function spawnBag(){ if(Math.random()<0.2 && bags.length<2) bags.push({x:Math.random()*(canvas.width-30),y:-40,r:15}); }
 
 // === СТРЕЛЬБА ===
 canvas.addEventListener("mousedown", shoot);
 function shoot(e){
-  if(state!=="game") return;
+  if(state!=="game" || reloading) return;
   let now=Date.now();
   let weap = weapons[currentWeapon];
   if(now-lastShot < weap.delay*1000) return;
@@ -146,13 +159,18 @@ function shoot(e){
     let offset = weap.spread ? (Math.random()*20-10) : 0;
     bullets.push({x:e.clientX+offset, y:canvas.height-80});
   }
+  weap.ammo--;
+  if(weap.ammo<=0){
+    reloading = true;
+    reloadStart = Date.now();
+  }
 }
 
 // === СНЕГ ===
 let snowflakes=[];
 function spawnSnow(){
   if(currentMode==="christmas"){
-    for(let i=0;i<2;i++) snowflakes.push({x:Math.random()*canvas.width,y:0,r:Math.random()*3+1});
+    for(let i=0;i<1;i++) snowflakes.push({x:Math.random()*canvas.width,y:0,r:Math.random()*2+1});
   }
 }
 function drawSnow(){
@@ -165,9 +183,11 @@ function drawSnow(){
 
 // === СТАРТ ИГРЫ ===
 function startGame(){
-  state="game"; zombies=[]; bullets=[]; chests=[];
+  state="game"; zombies=[]; bullets=[]; chests=[]; bags=[];
   kills=0; wave=1; waveTimer=waveTime;
   spawnRate=0.02; zombieSpeed=1.2; baseHP=250;
+  for(let w in weapons) weapons[w].ammo = weapons[w].maxAmmo;
+  reloading=false;
   hideAll();
 }
 
@@ -175,10 +195,14 @@ function startGame(){
 function update(){
   if(state!=="game") return;
 
+  if(reloading && Date.now()-reloadStart>reloadTime){
+    reloading=false;
+    weapons[currentWeapon].ammo = weapons[currentWeapon].maxAmmo;
+  }
+
   waveTimer -= 0.016;
   if(Math.random()<spawnRate) spawnZombie();
-  spawnChest();
-  spawnSnow();
+  spawnChest(); spawnBag(); spawnSnow();
 
   if(waveTimer<=0){
     wave++;
@@ -191,26 +215,45 @@ function update(){
 
   bullets.forEach(b=>b.y-=12);
 
-  zombies.forEach((z,i)=>{
-    bullets.forEach((b,j)=>{
+  // УБИЙСТВО ЗОМБИ
+  for(let i=zombies.length-1;i>=0;i--){
+    let z = zombies[i];
+    let hit = false;
+    for(let j=bullets.length-1;j>=0;j--){
+      let b = bullets[j];
       if(b.x>z.x && b.x<z.x+35 && b.y>z.y && b.y<z.y+35){
-        z.hp--;
-        bullets.splice(j,1);
+        z.hp--; bullets.splice(j,1); hit=true;
         if(z.hp<=0){ zombies.splice(i,1); kills++; totalKills++; coins++; saveProgress(); }
+        break;
       }
-    });
-    z.y += zombieSpeed;
-    if(z.y > canvas.height-50) { baseHP-=35; z.y=9999; }
-  });
+    }
+    if(!hit) z.y += zombieSpeed;
+    if(z.y>canvas.height-50){ baseHP-=20; zombies.splice(i,1); }
+  }
 
-  chests.forEach((c,i)=>{
-    bullets.forEach((b,j)=>{
+  // СУНДУКИ
+  for(let i=chests.length-1;i>=0;i--){
+    let c = chests[i];
+    for(let j=bullets.length-1;j>=0;j--){
+      let b = bullets[j];
       if(b.x>c.x && b.x<c.x+c.size && b.y>c.y && b.y<c.y+c.size){
-        coins += 5; bullets.splice(j,1); chests.splice(i,1); saveProgress();
+        coins += 5; bullets.splice(j,1); chests.splice(i,1); saveProgress(); break;
       }
-    });
+    }
     c.y += 1.5;
-  });
+  }
+
+  // МЕШКИ
+  for(let i=bags.length-1;i>=0;i--){
+    let bag = bags[i];
+    for(let j=bullets.length-1;j>=0;j--){
+      let b = bullets[j];
+      if(Math.hypot(b.x-(bag.x+bag.r), b.y-(bag.y+bag.r))<bag.r){
+        coins += 15; bullets.splice(j,1); bags.splice(i,1); saveProgress(); break;
+      }
+    }
+    bag.y += 1.5;
+  }
 
   if(baseHP<=0) endGame();
 }
@@ -227,8 +270,8 @@ function endGame(){ state="over"; hideAll(); gameover.classList.remove("hidden")
 // === ОТРИСОВКА ===
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(currentMode==="christmas"){ ctx.fillStyle="#1e3f66"; ctx.fillRect(0,0,canvas.width,canvas.height); }
-  else ctx.fillStyle="#228B22"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=currentMode==="christmas" ? "#1e3f66" : "#228B22";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
   if(state!=="game") return;
 
   // база
@@ -237,6 +280,10 @@ function draw(){
   ctx.fillText(`🧱 База HP: ${baseHP}`,10,30);
   ctx.fillText(`🌊 Волна ${wave} : ${Math.ceil(waveTimer)} сек`,10,60);
   ctx.fillText(`💀 Убийства: ${kills}`,10,90);
+
+  if(reloading){
+    ctx.fillStyle="yellow"; ctx.font="30px Arial"; ctx.fillText("Перезарядка...",canvas.width/2-80,50);
+  }
 
   if(currentMode==="christmas") drawSnow();
 
@@ -249,7 +296,11 @@ function draw(){
   // сундуки
   ctx.fillStyle="orange"; chests.forEach(c=>ctx.fillRect(c.x,c.y,c.size,c.size));
 
-  // кнопка меню в игре
+  // мешки
+  ctx.fillStyle="yellow"; ctx.font="20px Arial";
+  bags.forEach(b=>{ ctx.beginPath(); ctx.arc(b.x+b.r,b.y+b.r,b.r,0,Math.PI*2); ctx.fill(); ctx.fillText("💰",b.x+b.r-10,b.y+b.r+7); });
+
+  // кнопка меню
   ctx.fillStyle="#0044cc"; ctx.fillRect(canvas.width-110,10,100,40);
   ctx.fillStyle="white"; ctx.fillText("Меню",canvas.width-90,35);
 }
