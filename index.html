@@ -11,7 +11,7 @@ canvas {display:block;}
 .hidden {display:none;}
 button {padding:14px 22px;margin:10px;font-size:18px;border:none;border-radius:10px;cursor:pointer;}
 .balance {position:absolute;top:15px;right:20px;font-size:20px;}
-.stats {margin-top:10px;font-size:18px;}
+.stats {margin-top:10px;font-size:18px;white-space: pre-line;}
 .task {margin:10px;text-align:center;}
 .chest-btn {position:absolute;top:10px;left:10px;padding:10px 15px;background:orange;color:black;border-radius:8px;cursor:pointer;}
 </style>
@@ -36,6 +36,7 @@ button {padding:14px 22px;margin:10px;font-size:18px;border:none;border-radius:1
   <button onclick="selectMode('christmas')">🎄 Новогодний⛄</button>
   <button onclick="selectMode('timer')">Таймер на нуле (30 сек)</button>
   <button onclick="openMenu()">⬅ Назад</button>
+  <button onclick="openUpgradeUnits()">🛡 Upgrade Defense</button>
 </div>
 
 <!-- BATTLE PASS -->
@@ -94,112 +95,131 @@ function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
 resize();addEventListener("resize",resize);
 
 /* ===== ПЕРЕМЕННЫЕ ===== */
-let state="menu",zombies=[],bullets=[],kills=0,
-    coins=Number(localStorage.getItem("coins"))||0,
-    fenceHP=500;
-
-/* ===== ДОБАВЛЕНО: ОБЩИЕ УБИЙСТВА (НЕ СБРАСЫВАЮТСЯ) ===== */
-let totalKills = Number(localStorage.getItem("totalKills")) || 0;
+let state="menu", zombies=[], bullets=[], kills=0,
+coins=Number(localStorage.getItem("coins"))||0,
+totalKills = Number(localStorage.getItem("totalKills")) || 0;
 
 let wave=1,maxWaves=5,waveTime=20,waveTimer=20,wavePause=false,pauseTimer=0;
 let spawnRate=0.02,zombieSpeed=1.2,lastTime=Date.now();
 let currentMode="standard";
 
 let weapons={
-  "Pistol": {delay:0.8, bullets:1, price:0, owned:true},
-  "Tek-9": {delay:1, bullets:2, price:200, owned:false},
-  "Shotgun": {delay:0.4, bullets:3, spread:true, price:350, owned:false},
-  "UMP": {delay:0.5, bullets:3, spread:true, burst:3, burstDelay:200, price:1000, owned:false},
-  "MachineGun": {delay:0.1, bullets:5, spread:true, price:1500, owned:false},
-  "ICE Gun": {delay:0.5, bullets:3, spread:false, price:599, owned:false}
+"Pistol": {delay:0.8, bullets:1, price:0, owned:true},
+"Tek-9": {delay:1, bullets:2, price:200, owned:false},
+"Shotgun": {delay:0.4, bullets:3, spread:true, price:350, owned:false},
+"UMP": {delay:0.5, bullets:3, spread:true, burst:3, burstDelay:200, price:1000, owned:false},
+"MachineGun": {delay:0.1, bullets:5, spread:true, price:1500, owned:false},
+"ICE Gun": {delay:0.5, bullets:3, spread:false, price:599, owned:false}
 };
 
-let currentWeapon="Pistol",lastShot=0,autoFireQueue=[];
+let currentWeapon="Pistol", lastShot=0, autoFireQueue=[];
 let taskData={t1:false,t2:false,t3:false};
 let chestOpened={normal:false,medium:false,legend:false};
+
+/* ===== БАЗА ===== */
+let baseHP = 250;   // обновлено до 250 HP
+let baseLevel = 1;
 
 /* ===== ПРОГРЕСС КВЕСТОВ ===== */
 function saveTasks(){ localStorage.setItem("taskData", JSON.stringify(taskData)); }
 function loadTasks(){ let saved = JSON.parse(localStorage.getItem("taskData")); if(saved) taskData = saved; }
 loadTasks();
 
+/* ===== МЕНЮ ===== */
+function hideAll(){
+  menu.classList.add("hidden");
+  modes.classList.add("hidden");
+  battlepass.classList.add("hidden");
+  shop.classList.add("hidden");
+  gameover.classList.add("hidden");
+  chests.classList.add("hidden");
+  canvas.style.pointerEvents="auto";
+}
+
+function openMenu(){hideAll();state="menu";updateMenu();menu.classList.remove("hidden"); canvas.style.pointerEvents="none";}
+function openModes(){hideAll();modes.classList.remove("hidden"); canvas.style.pointerEvents="none";}
+function openBattlePass(){hideAll();battlepass.classList.remove("hidden");updateTasks(); canvas.style.pointerEvents="none";}
+function openShop(){hideAll();shop.classList.remove("hidden");updateShop(); canvas.style.pointerEvents="none";}
+function openChests(){hideAll();chests.classList.remove("hidden");document.getElementById("chestResult").innerText=""; canvas.style.pointerEvents="none";}
+function selectMode(mode){currentMode=mode; startGame();}
+function openUpgradeUnits(){ alert("Upgrade Units Shop coming soon!"); }
+
 /* ===== ИГРА ===== */
 function startGame(){
-    state="game";zombies=[];bullets=[];kills=0;fenceHP=500;
-    wave=1;waveTimer=waveTime;wavePause=false;pauseTimer=0;
-    spawnRate=0.02;zombieSpeed=1.2;
-    hideAll();
+state="game"; zombies=[]; bullets=[]; kills=0;
+wave=1; waveTimer=waveTime; wavePause=false; pauseTimer=0;
+spawnRate=0.02; zombieSpeed=1.2;
+hideAll();
 }
-function openMenu(){hideAll();state="menu";updateMenu();menu.classList.remove("hidden");}
-function openModes(){hideAll();modes.classList.remove("hidden");}
-function openBattlePass(){hideAll();battlepass.classList.remove("hidden");updateTasks();}
-function openShop(){hideAll();shop.classList.remove("hidden");updateShop();}
-function openChests(){hideAll();chests.classList.remove("hidden");document.getElementById("chestResult").innerText="";}
-function hideAll(){menu.classList.add("hidden");modes.classList.add("hidden");battlepass.classList.add("hidden");shop.classList.add("hidden");gameover.classList.add("hidden");chests.classList.add("hidden");}
-function selectMode(mode){currentMode=mode; startGame();}
+
+/* ===== HUD ===== */
+function updateMenu(){
+document.getElementById("menuCoins").innerText="💰 "+coins;
+document.getElementById("menuStats").innerText=`Убийств всего: ${totalKills}\nБаза LV: ${baseLevel}, HP: ${baseHP}`;
+}
+
+/* ===== ЗАДАНИЯ ===== */
+function updateTasks(){
+let t1Progress = Math.min(totalKills,50);
+let t2Progress = Math.min(totalKills,200);
+let t3Progress = Math.min(totalKills,1000);
+document.getElementById("task1").innerText=(taskData.t1?50:t1Progress)+"/50";
+document.getElementById("task2").innerText=(taskData.t2?200:t2Progress)+"/200";
+document.getElementById("task3").innerText=(taskData.t3?1000:t3Progress)+"/1000";
+}
+function claimRewards(){
+if(!taskData.t1 && totalKills>=50){coins+=50;taskData.t1=true;}
+if(!taskData.t2 && totalKills>=200){coins+=200;taskData.t2=true;}
+if(!taskData.t3 && totalKills>=1000){coins+=500;taskData.t3=true;}
+updateTasks();updateMenu();saveTasks();
+}
 
 /* ===== МАГАЗИН ===== */
 function updateShop(){
     let html="";
     for(let w in weapons){
         let weap=weapons[w];
+        let buttonText = "";
+        if(!weap.owned){
+            buttonText = "Купить";
+        } else {
+            buttonText = currentWeapon === w ? "Экипировано" : "Экипировать";
+        }
         html+=`<div style="margin:10px"><b>${w}</b> - ${weap.price}💰<br>
-        <button onclick="buyEquip('${w}')">${weap.owned?(currentWeapon===w?"Экипировано":"Экипировать"):"Купить"}</button></div>`;
+        <button onclick="buyEquip('${w}')">${buttonText}</button></div>`;
     }
     document.getElementById("shopItems").innerHTML=html;
 }
+
 function buyEquip(name){
     let weap=weapons[name];
     if(!weap.owned){
-        if(coins>=weap.price){coins-=weap.price; weap.owned=true;}
-        else{alert("Недостаточно монет!"); return;}
-    }
-    currentWeapon=name;
+        if(coins >= weap.price){
+            coins -= weap.price;
+            weap.owned = true;
+            alert(`${name} куплен!`);
+        } else {
+            alert("Недостаточно монет!");
+            return;
+        }
+    } 
+    currentWeapon = name;
     updateShop();
-}
-
-/* ===== ЗАДАНИЯ ===== */
-function updateTasks(){
-    let t1Progress = Math.min(totalKills,50);
-    let t2Progress = Math.min(totalKills,200);
-    let t3Progress = Math.min(totalKills,1000);
-    document.getElementById("task1").innerText=(taskData.t1?50:t1Progress)+"/50";
-    document.getElementById("task2").innerText=(taskData.t2?200:t2Progress)+"/200";
-    document.getElementById("task3").innerText=(taskData.t3?1000:t3Progress)+"/1000";
-}
-function claimRewards(){
-    if(!taskData.t1 && totalKills>=50){coins+=50;taskData.t1=true;}
-    if(!taskData.t2 && totalKills>=200){coins+=200;taskData.t2=true;}
-    if(!taskData.t3 && totalKills>=1000){coins+=500;taskData.t3=true;}
-    updateTasks();updateMenu();saveTasks();
+    updateMenu();
 }
 
 /* ===== СУНДУКИ ===== */
 function openChest(type){
-    if(chestOpened[type]) { alert("Вы уже открыли этот сундук!"); return; }
-    if(!taskData.t1 || !taskData.t2 || !taskData.t3){alert("Сначала выполните все задания!"); return;}
-    let chance=Math.random()*100, reward=0;
-    if(type==="normal"){if(chance<75) reward=35; else if(chance<90) reward=80; else if(chance<99) reward=120; else reward=200;}
-    else if(type==="medium"){if(chance<80) reward=70; else if(chance<93) reward=100; else if(chance<98) reward=150; else reward=200;}
-    else{if(chance<91) reward=100; else if(chance<96) reward=250; else if(chance<99) reward=500; else if(chance<99.99) reward=1000; else reward=100000;}
-    coins+=reward;
-    document.getElementById("chestResult").innerText=`Вы получили ${reward} монет!`;
-    chestOpened[type]=true;
-    updateMenu();
-}
-
-/* ===== СБРОС ЗАДАНИЙ И СУНДУКОВ ===== */
-setInterval(()=>{
-    taskData={t1:false,t2:false,t3:false};
-    chestOpened={normal:false, medium:false, legend:false};
-    saveTasks();
-    updateTasks();
-},25*60*1000);
-
-/* ===== HUD ===== */
-function updateMenu(){
-  document.getElementById("menuCoins").innerText="💰 "+coins;
-  document.getElementById("menuStats").innerText=`Убийств всего: ${totalKills}`;
+if(chestOpened[type]) { alert("Вы уже открыли этот сундук!"); return; }
+if(!taskData.t1 || !taskData.t2 || !taskData.t3){alert("Сначала выполните все задания!"); return;}
+let chance=Math.random()*100, reward=0;
+if(type==="normal"){if(chance<75) reward=35; else if(chance<90) reward=80; else if(chance<99) reward=120; else reward=200;}
+else if(type==="medium"){if(chance<80) reward=70; else if(chance<93) reward=100; else if(chance<98) reward=150; else reward=200;}
+else{if(chance<91) reward=100; else if(chance<96) reward=250; else if(chance<99) reward=500; else if(chance<99.99) reward=1000; else reward=100000;}
+coins+=reward;
+document.getElementById("chestResult").innerText=`Вы получили ${reward} монет!`;
+chestOpened[type]=true;
+updateMenu();
 }
 
 /* ===== СПАВН ЗОМБИ ===== */
@@ -210,139 +230,131 @@ canvas.addEventListener("mousedown", shoot);
 canvas.addEventListener("touchstart", shoot);
 
 function shoot(e){
-    if(state!=="game") return;
-    const rect=canvas.getBoundingClientRect();
-    let x=(e.clientX||e.touches[0].clientX)-rect.left;
-    let y=canvas.height-90;
-    let now=Date.now();
-    let weapon=weapons[currentWeapon];
-    if(currentWeapon==="UMP"){
-        for(let i=0;i<weapon.burst;i++){
-            autoFireQueue.push({x:x,y:y,bullets:weapon.bullets,time:now+i*weapon.burstDelay});
-        }
-    }else{
-        if(now-lastShot<weapon.delay*1000) return;
-        lastShot=now;
-        for(let i=0;i<weapon.bullets;i++){
-            let offset=weapon.spread?(i-(weapon.bullets-1)/2)*12:0;
-            bullets.push({x:x+offset,y:y,flash:5});
-        }
-    }
+if(state!=="game") return;
+const rect=canvas.getBoundingClientRect();
+let x=(e.clientX||e.touches[0].clientX)-rect.left;
+let y=canvas.height-90;
+let now=Date.now();
+let weapon=weapons[currentWeapon];
+
+if(currentWeapon==="UMP"){
+for(let i=0;i<weapon.burst;i++){
+autoFireQueue.push({x:x,y:y,bullets:weapon.bullets,time:now+i*weapon.burstDelay});
+}
+}else{
+if(now-lastShot<weapon.delay*1000) return;
+lastShot=now;
+for(let i=0;i<weapon.bullets;i++){
+let offset=weapon.spread?(i-(weapon.bullets-1)/2)*12:0;
+bullets.push({x:x+offset,y:y,flash:5});
+}
+}
+}
+
+function updateAutoFireQueue(){
+let nowMs=Date.now();
+autoFireQueue=autoFireQueue.filter(f=>{
+if(nowMs>=f.time){
+for(let i=0;i<f.bullets;i++){
+let offset=(i-(f.bullets-1)/2)*12;
+bullets.push({x:f.x+offset,y:f.y,flash:5});
+}
+return false;
+}
+return true;
+});
 }
 
 /* ===== ОБНОВЛЕНИЕ ===== */
 function update(){
-    if(state!=="game") return;
-    const now=Date.now(),delta=(now-lastTime)/1000;lastTime=now;
+if(state!=="game") return;
+const now=Date.now(),delta=(now-lastTime)/1000; lastTime=now;
 
-    if(currentMode!=="timer"){
-        if(!wavePause){waveTimer-=delta;if(Math.random()<spawnRate) spawnZombie();}
-        else{pauseTimer-=delta;if(pauseTimer<=0){wavePause=false;waveTimer=waveTime;}}
-        if(waveTimer<=0&&!wavePause){wavePause=true;pauseTimer=3;wave++;spawnRate+=0.01;zombieSpeed+=0.3;if(wave>maxWaves) endGame();}
-    }else{waveTimer-=delta;if(waveTimer<=0) endGame();if(Math.random()<0.08) spawnZombie();}
+if(currentMode!=="timer"){
+if(!wavePause){waveTimer-=delta;if(Math.random()<spawnRate) spawnZombie();}
+else{pauseTimer-=delta;if(pauseTimer<=0){wavePause=false; waveTimer=waveTime;}}
+if(waveTimer<=0 && !wavePause){wavePause=true; pauseTimer=3; wave++; spawnRate+=0.01; zombieSpeed+=0.3; if(wave>maxWaves) endGame();}
+}else{
+waveTimer-=delta;if(waveTimer<=0) endGame(); if(Math.random()<0.08) spawnZombie();
+}
 
-    bullets.forEach(b=>b.y-=12);
-    let nowMs=Date.now();
-    autoFireQueue=autoFireQueue.filter(f=>{
-        if(nowMs>=f.time){
-          for(let i=0;i<f.bullets;i++){
-            let offset=(i-(f.bullets-1)/2)*12;
-            bullets.push({x:f.x+offset,y:f.y,flash:5});
-          }
-          return false;
-        }
-        return true;
-    });
+bullets.forEach(b=>b.y-=12);
+updateAutoFireQueue();
 
-    zombies.forEach((z,i)=>{
-        bullets.forEach((b,j)=>{
-            if(b.x>z.x && b.x<z.x+35 && b.y>z.y && b.y<z.y+35){
-                z.hp--;
-                bullets.splice(j,1);
-                if(z.hp<=0){
-                    zombies.splice(i,1);
-                    kills++;
-                    totalKills++;
-                    localStorage.setItem("totalKills", totalKills);
-                    coins++;
-                }
-            }
-        });
-    });
+zombies.forEach((z,i)=>{
+bullets.forEach((b,j)=>{
+if(b.x>z.x && b.x<z.x+35 && b.y>z.y && b.y<z.y+35){
+z.hp--; bullets.splice(j,1);
+if(z.hp<=0){ zombies.splice(i,1); kills++; totalKills++; localStorage.setItem("totalKills", totalKills); coins++; }
+}
+});
+});
 
-    zombies.forEach(z=>{
-      z.y+=zombieSpeed;
-      if(z.y>canvas.height-50){
-        fenceHP-=35;
-        z.y=9999;
-        kills++;
-        totalKills++;
-        localStorage.setItem("totalKills", totalKills);
-        coins++;
-      }
-    });
+zombies.forEach(z=>{
+z.y+=zombieSpeed;
+if(z.y>canvas.height-50){
+baseHP-=35;
+z.y=9999;
+kills++; totalKills++; localStorage.setItem("totalKills", totalKills); coins++;
+}
+});
 
-    zombies=zombies.filter(z=>z.y<canvas.height);
-    bullets=bullets.filter(b=>b.y>0);
-    if(fenceHP<=0) endGame();
+zombies=zombies.filter(z=>z.y<canvas.height);
+bullets=bullets.filter(b=>b.y>0);
+if(baseHP<=0) endGame();
 }
 
 /* ===== КОНЕЦ ИГРЫ ===== */
-function endGame(){state="over";hideAll();gameover.classList.remove("hidden");updateMenu();}
+function endGame(){state="over";hideAll();gameover.classList.remove("hidden");updateMenu(); canvas.style.pointerEvents="none";}
 
 /* ===== ОТРИСОВКА ===== */
 let snow=[];
-for(let i=0;i<200;i++){
-  snow.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,vy:0.3+Math.random()*0.2});
-}
+for(let i=0;i<200;i++){snow.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,vy:0.3+Math.random()*0.2});}
+
 function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    if(state!=="game") return;
-    ctx.fillStyle=currentMode==="christmas"?"#87CEEB":"#228B22";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+ctx.clearRect(0,0,canvas.width,canvas.height);
+if(state!=="game") return;
 
-    if(currentMode==="christmas"){
-      ctx.fillStyle="white";
-      snow.forEach(s=>{
-        ctx.beginPath();ctx.arc(s.x,s.y,3,0,Math.PI*2);ctx.fill();
-        s.y+=s.vy;if(s.y>canvas.height) s.y=0;
-      });
-    }
+ctx.fillStyle=currentMode==="christmas"?"#87CEEB":"#228B22";
+ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    ctx.fillStyle="red";
-    ctx.fillRect(0,canvas.height-50,canvas.width,50);
+if(currentMode==="christmas"){
+ctx.fillStyle="white";
+snow.forEach(s=>{
+ctx.beginPath();ctx.arc(s.x,s.y,3,0,Math.PI*2);ctx.fill();
+s.y+=s.vy;if(s.y>canvas.height) s.y=0;
+});
+}
 
-    ctx.fillStyle="white";
-    ctx.font="20px Arial";
-    ctx.fillText(`💀 Убито: ${kills}`,10,30);
-    ctx.fillText(`💰 Монеты: ${coins}`,10,60);
-    ctx.fillText(`🧱 Забор HP: ${fenceHP}`,10,90);
-    if(currentMode!=="timer") ctx.fillText(`🌊 ${wave} волна: ${Math.ceil(waveTimer)} сек`,10,120);
-    else ctx.fillText(`⏱ Таймер: ${Math.ceil(waveTimer)} сек`,10,120);
+ctx.fillStyle="red";
+ctx.fillRect(0,canvas.height-50,canvas.width,50);
 
-    ctx.fillStyle="yellow";
-    bullets.forEach(b=>{
-      ctx.fillRect(b.x-3,b.y,6,12);
-      if(b.flash&&b.flash>0){
-        ctx.fillStyle="orange";
-        ctx.fillRect(b.x-6,b.y-6,12,12);
-        b.flash--;
-        ctx.fillStyle="yellow";
-      }
-    });
+ctx.fillStyle="white";
+ctx.font="20px Arial";
+ctx.fillText(`💀 Убито: ${kills}`,10,30);
+ctx.fillText(`💰 Монеты: ${coins}`,10,60);
+ctx.fillText(`🧱 База HP: ${baseHP}`,10,90);
+if(currentMode!=="timer") ctx.fillText(`🌊 ${wave} волна: ${Math.ceil(waveTimer)} сек`,10,120);
+else ctx.fillText(`⏱ Таймер: ${Math.ceil(waveTimer)} сек`,10,120);
 
-    ctx.fillStyle="green";
-    zombies.forEach(z=>ctx.fillRect(z.x,z.y,35,35));
+ctx.fillStyle="yellow";
+bullets.forEach(b=>{
+ctx.fillRect(b.x-3,b.y,6,12);
+if(b.flash && b.flash>0){ ctx.fillStyle="orange"; ctx.fillRect(b.x-6,b.y-6,12,12); b.flash--; ctx.fillStyle="yellow"; }
+});
 
-    ctx.fillStyle="#0066ff";
-    ctx.fillRect(canvas.width-90,10,80,35);
-    ctx.fillStyle="white";
-    ctx.fillText("Меню",canvas.width-70,35);
+ctx.fillStyle="green";
+zombies.forEach(z=>ctx.fillRect(z.x,z.y,35,35));
+
+ctx.fillStyle="#0066ff";
+ctx.fillRect(canvas.width-90,10,80,35);
+ctx.fillStyle="white";
+ctx.fillText("Меню",canvas.width-70,35);
 }
 
 /* ===== КНОПКА МЕНЮ НА КАНВАСЕ ===== */
 canvas.addEventListener("click",e=>{
-  if(e.clientX>canvas.width-90&&e.clientX<canvas.width-10&&e.clientY>10&&e.clientY<45) openMenu();
+if(e.clientX>canvas.width-90&&e.clientX<canvas.width-10&&e.clientY>10&&e.clientY<45) openMenu();
 });
 
 /* ===== ЦИКЛ ===== */
