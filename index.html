@@ -7,363 +7,450 @@
 <style>
 html, body {margin:0;padding:0;overflow:hidden;background:black;font-family:Arial;color:white;}
 canvas {display:block;}
-.menu,.gameover,.modes,.battlepass,.shop,.unitUpgrade {position:fixed;inset:0;background:#0044cc;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10;}
+.menu,.gameover,.modes,.battlepass,.shop,.chests,.friendMenu {position:fixed;inset:0;background:#0044cc;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10;}
 .hidden {display:none;}
 button {padding:14px 22px;margin:10px;font-size:18px;border:none;border-radius:10px;cursor:pointer;}
 .balance {position:absolute;top:15px;right:20px;font-size:20px;}
 .stats {margin-top:10px;font-size:18px;white-space: pre-line;}
 .task {margin:10px;text-align:center;}
+.chest-btn {position:absolute;top:10px;left:10px;padding:10px 15px;background:orange;color:black;border-radius:8px;cursor:pointer;}
+input {padding:8px 12px;font-size:16px;margin:5px;border-radius:6px;border:none;}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
+<!-- МЕНЮ -->
 <div id="menu" class="menu">
   <div class="balance" id="menuCoins">💰 0</div>
   <h1>🧟 Zombie Shooter</h1>
   <button onclick="openModes()">▶ Играть</button>
   <button onclick="openBattlePass()">🎟 Задания</button>
   <button onclick="openShop()">🛒 Магазин</button>
+  <button onclick="openFriendMenu()">🤝 Играть с другом</button>
   <div class="stats" id="menuStats"></div>
 </div>
 
+<!-- МЕНЮ РЕЖИМОВ -->
 <div id="modes" class="modes hidden">
   <h1>Выберите режим</h1>
   <button onclick="selectMode('standard')">Стандартный (5 волн)</button>
   <button onclick="selectMode('christmas')">🎄 Новогодний⛄</button>
-  <button onclick="openUnitUpgrade()">⚔ Улучшить Юнитов</button>
+  <button onclick="selectMode('timer')">Таймер на нуле (30 сек)</button>
   <button onclick="openMenu()">⬅ Назад</button>
 </div>
 
+<!-- МЕНЮ ИГРЫ С ДРУГОМ -->
+<div id="friendMenu" class="friendMenu hidden">
+  <h1>Играть с другом</h1>
+  <button onclick="createRoom()">Создать комнату</button>
+  <input type="text" id="roomCodeInput" placeholder="Введите код комнаты">
+  <button onclick="joinRoom()">Присоединиться</button>
+  <button onclick="startFriendGame()">▶ Начать игру</button>
+  <button onclick="openMenu()">⬅ Назад</button>
+  <div id="friendInfo" style="margin-top:15px;color:yellow"></div>
+</div>
+
+<!-- BATTLE PASS -->
 <div id="battlepass" class="battlepass hidden">
   <h1>🎟 Задания</h1>
-  <div class="task"><div>Убить 50 зомби</div><div id="task1"></div></div>
-  <div class="task"><div>Убить 200 зомби</div><div id="task2"></div></div>
-  <div class="task"><div>Убить 1000 зомби</div><div id="task3"></div></div>
-  <button onclick="claimRewards()">💰 Получить награду</button>
+  <div class="task">
+    <div style="color:lightgreen">Просто</div>
+    <div>Убить 50 зомби</div>
+    <div id="task1"></div>
+  </div>
+  <div class="task">
+    <div style="color:yellow">Средне</div>
+    <div>Убить 200 зомби</div>
+    <div id="task2"></div>
+  </div>
+  <div class="task">
+    <div style="color:red">Тяжело</div>
+    <div>Убить 1000 зомби и поиграть 10 минут</div>
+    <div id="task3"></div>
+  </div>
+  <button id="claimRewardBtn" onclick="claimRewards()">💰 Получить награду</button>
+  <button class="chest-btn" onclick="openChests()">Сундуки</button>
   <button onclick="openMenu()">⬅ Назад</button>
 </div>
 
+<!-- МАГАЗИН -->
 <div id="shop" class="shop hidden">
   <h1>🛒 Магазин</h1>
   <div id="shopItems"></div>
+  <button onclick="upgradeBase()">🏗 Upgrade Base (+50 HP за 500 монет)</button>
   <button onclick="openMenu()">⬅ Назад</button>
 </div>
 
+<!-- СУНДУКИ -->
+<div id="chests" class="chests hidden">
+  <h1>Сундуки</h1>
+  <div>
+    <button onclick="openChest('normal')">Обычный</button>
+    <button onclick="openChest('medium')">Средний</button>
+    <button onclick="openChest('legend')">Легендарный</button>
+  </div>
+  <div id="chestResult"></div>
+  <button onclick="openBattlePass()">⬅ Назад</button>
+</div>
+
+<!-- GAME OVER -->
 <div id="gameover" class="gameover hidden">
   <h1>Игра окончена</h1>
   <button onclick="startGame()">🔁 Играть снова</button>
   <button onclick="openMenu()">📋 Меню</button>
 </div>
 
-<div id="unitUpgrade" class="unitUpgrade hidden">
-  <h1>⚔ Улучшение Юнитов</h1>
-  <div id="unitList"></div>
-  <button onclick="backToModes()">⬅ Назад</button>
-</div>
-
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+const menu = document.getElementById("menu");
+const modes = document.getElementById("modes");
+const battlepass = document.getElementById("battlepass");
+const shop = document.getElementById("shop");
+const chests = document.getElementById("chests");
+const gameover = document.getElementById("gameover");
+const friendMenu = document.getElementById("friendMenu");
+
 function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
-resize(); addEventListener("resize",resize);
+resize();addEventListener("resize",resize);
 
-let state="menu", zombies=[], bullets=[], kills=0, chests=[], bags=[];
-let coins=Number(localStorage.getItem("coins"))||0;
-let totalKills=Number(localStorage.getItem("totalKills"))||0;
+/* ===== ПЕРЕМЕННЫЕ ===== */
+let state="menu", zombies=[], bullets=[], kills=0,
+coins=Number(localStorage.getItem("coins"))||0,
+totalKills = Number(localStorage.getItem("totalKills")) || 0;
 
-let wave=1,waveTime=20,waveTimer=20;
+let wave=1,maxWaves=5,waveTime=20,waveTimer=20,wavePause=false,pauseTimer=0;
 let spawnRate=0.02,zombieSpeed=1.2,lastTime=Date.now();
 let currentMode="standard";
 
-let weapons = {
-  "Pistol": {delay:0.8, bullets:1, spread:false, owned:true, price:0, ammo:13, maxAmmo:13},
-  "Tek-9": {delay:0.5, bullets:2, spread:false, owned:false, price:200, ammo:13, maxAmmo:13},
-  "Shotgun": {delay:1, bullets:5, spread:true, owned:false, price:350, ammo:8, maxAmmo:8},
-  "UMP": {delay:0.6, bullets:3, spread:true, owned:false, price:1000, ammo:15, maxAmmo:15}
+let weapons={
+"Pistol": {delay:0.8, bullets:1, price:0, owned:true},
+"Tek-9": {delay:1, bullets:2, price:200, owned:false},
+"Shotgun": {delay:0.4, bullets:3, spread:true, price:350, owned:false},
+"UMP": {delay:0.5, bullets:3, spread:true, burst:3, burstDelay:200, price:1000, owned:false},
+"MachineGun": {delay:0.1, bullets:5, spread:true, price:1500, owned:false},
+"ICE Gun": {delay:0.5, bullets:3, spread:false, price:599, owned:false}
 };
+
 let currentWeapon="Pistol", lastShot=0;
-let reloading=false, reloadTime=3000, reloadStart=0;
+let taskData={t1:false,t2:false,t3:false};
+let chestOpened={normal:false,medium:false,legend:false};
 
-let baseHP = 250;
+/* ===== ИГРА С ДРУГОМ ===== */
+let isFriendGame=false;
+let playerSide="left";
+let roomCode="";
+let friendConnected=false;
 
-let units = JSON.parse(localStorage.getItem("units")) || []; // Загружаем купленные юниты
-const UNIT_FIRE_DELAY = 2000; // 2 секунды
-let maxUnits = 2;
-let unitStats = [
-  {name:"Человек с пистолетом", dmg:1, delay:1000},
-  {name:"Человек с дробовиком", dmg:1, delay:1000},
-  {name:"Человек с UMP", dmg:1, delay:1000}
-];
+/* ===== БАЗА ===== */
+let baseHP = Number(localStorage.getItem("baseHP")) || 200;
+let baseLevel = Number(localStorage.getItem("baseLevel")) || 1;
 
-let lastClaim = Number(localStorage.getItem("lastClaim")) || 0;
+/* ===== МЕШКИ ===== */
+let bags = [];
+let zombieKillCount = 0;
 
-// === МЕНЮ ===
+/* ===== ПРОГРЕСС КВЕСТОВ ===== */
+function saveTasks(){ localStorage.setItem("taskData", JSON.stringify(taskData)); }
+function loadTasks(){ let saved = JSON.parse(localStorage.getItem("taskData")); if(saved) taskData = saved; }
+loadTasks();
+
+/* ===== МЕНЮ ===== */
 function hideAll(){
   menu.classList.add("hidden");
   modes.classList.add("hidden");
   battlepass.classList.add("hidden");
   shop.classList.add("hidden");
   gameover.classList.add("hidden");
-  unitUpgrade.classList.add("hidden");
+  chests.classList.add("hidden");
+  friendMenu.classList.add("hidden");
   canvas.style.pointerEvents="auto";
 }
-function openMenu(){hideAll();state="menu";updateMenu();menu.classList.remove("hidden");canvas.style.pointerEvents="none";}
-function openModes(){hideAll();modes.classList.remove("hidden");canvas.style.pointerEvents="none";}
-function openBattlePass(){hideAll();battlepass.classList.remove("hidden");updateTasks();canvas.style.pointerEvents="none";}
-function openShop(){hideAll();shop.classList.remove("hidden");updateShop();canvas.style.pointerEvents="none";}
-function selectMode(m){currentMode=m;startGame();}
-function backToModes(){hideAll();modes.classList.remove("hidden");canvas.style.pointerEvents="none";}
 
-// HUD
-function updateMenu(){
-  menuCoins.innerText="💰 "+coins;
-  menuStats.innerText=`Убийств всего: ${totalKills}\nБаза HP: ${baseHP}`;
+function openMenu(){hideAll();state="menu";updateMenu();menu.classList.remove("hidden"); canvas.style.pointerEvents="none";}
+function openModes(){hideAll();modes.classList.remove("hidden"); canvas.style.pointerEvents="none";}
+function openBattlePass(){hideAll();battlepass.classList.remove("hidden");updateTasks(); canvas.style.pointerEvents="none";}
+function openShop(){hideAll();shop.classList.remove("hidden");updateShop(); canvas.style.pointerEvents="none";}
+function openChests(){hideAll();chests.classList.remove("hidden");document.getElementById("chestResult").innerText=""; canvas.style.pointerEvents="none";}
+function openFriendMenu(){hideAll();friendMenu.classList.remove("hidden");document.getElementById("friendInfo").innerText=""; canvas.style.pointerEvents="none";}
+function selectMode(mode){currentMode=mode; startGame();}
+
+/* ===== СОЗДАНИЕ/ПРИСОЕДИНЕНИЕ ===== */
+function generateRoomCode(){return Math.random().toString(36).substring(2,6).toUpperCase()+'-'+Math.random().toString(36).substring(2,6).toUpperCase();}
+function createRoom(){roomCode=generateRoomCode();friendConnected=true; playerSide="left"; document.getElementById("friendInfo").innerText="Комната создана: "+roomCode;}
+function joinRoom(){let code=document.getElementById("roomCodeInput").value.trim().toUpperCase(); if(!code){alert("Введите код!"); return;} roomCode=code; friendConnected=true; playerSide="right"; document.getElementById("friendInfo").innerText="Подключено к комнате: "+roomCode;}
+function startFriendGame(){if(!friendConnected){alert("Нет друга!"); return;} isFriendGame=true; startGame();}
+
+/* ===== ИГРА ===== */
+function startGame(){
+state="game"; zombies=[]; bullets=[]; kills=0; bags=[];
+wave=1; waveTimer=waveTime; wavePause=false; pauseTimer=0;
+spawnRate=0.02; zombieSpeed=1.2; zombieKillCount=0;
+hideAll();
 }
+
+/* ===== HUD ===== */
+function updateMenu(){
+document.getElementById("menuCoins").innerText="💰 "+coins;
+document.getElementById("menuStats").innerText=`Убийств всего: ${totalKills}\nБаза LV: ${baseLevel}, HP: ${baseHP}`;
+}
+
+/* ===== ЗАДАНИЯ ===== */
 function updateTasks(){
-  task1.innerText=Math.min(totalKills,50)+"/50";
-  task2.innerText=Math.min(totalKills,200)+"/200";
-  task3.innerText=Math.min(totalKills,1000)+"/1000";
+let t1Progress = Math.min(totalKills,50);
+let t2Progress = Math.min(totalKills,200);
+let t3Progress = Math.min(totalKills,1000);
+document.getElementById("task1").innerText=(taskData.t1?50:t1Progress)+"/50";
+document.getElementById("task2").innerText=(taskData.t2?200:t2Progress)+"/200";
+document.getElementById("task3").innerText=(taskData.t3?1000:t3Progress)+"/1000";
 }
 function claimRewards(){
-  let now = Date.now();
-  if(now - lastClaim < 30*60*1000) return alert("Награду можно получить через 30 минут");
-  coins += 50;
-  lastClaim = now;
-  localStorage.setItem("lastClaim", lastClaim);
-  saveProgress(); updateMenu();
-  alert("Награда получена!");
+if(!taskData.t1 && totalKills>=50){coins+=50;taskData.t1=true;}
+if(!taskData.t2 && totalKills>=200){coins+=200;taskData.t2=true;}
+if(!taskData.t3 && totalKills>=1000){coins+=500;taskData.t3=true;}
+updateTasks();updateMenu();saveTasks();
 }
 
-// Магазин
+/* ===== МАГАЗИН ===== */
 function updateShop(){
-  let html="";
-  for(let w in weapons){
-    let weap = weapons[w];
-    html += `<div><b>${w}</b> - ${weap.price}💰<br>
-      <button onclick="buyEquip('${w}')">${weap.owned ? (currentWeapon===w?"Экипировано":"Экипировать"):"Купить"}</button></div>`;
-  }
-  shopItems.innerHTML=html;
+let html="";
+for(let w in weapons){
+let weap=weapons[w];
+html+=`<div style="margin:10px"><b>${w}</b> - ${weap.price}💰<br>
+<button onclick="buyEquip('${w}')">${weap.owned?(currentWeapon===w?"Экипировано":"Экипировать"):"Купить"}</button></div>`;
 }
-function buyEquip(w){
-  let weap = weapons[w];
-  if(!weap.owned){
-    if(coins<weap.price) return alert("Нет монет");
-    coins -= weap.price;
-    weap.owned=true;
-  }
-  currentWeapon=w;
-  updateShop(); updateMenu(); saveProgress();
+document.getElementById("shopItems").innerHTML=html;
+}
+function buyEquip(name){
+let weap=weapons[name];
+if(!weap.owned){
+if(coins>=weap.price){coins-=weap.price; weap.owned=true;}
+else{alert("Недостаточно монет!"); return;}
+}
+currentWeapon=name;
+updateShop();
 }
 
-// Спавн
-function spawnZombie(){ zombies.push({x:Math.random()*(canvas.width-40),y:-40,hp:1}); }
-function spawnChest(){ if(Math.random()<0.001 && chests.length<3) chests.push({x:Math.random()*(canvas.width-40),y:-40,size:25}); }
-function spawnBag(){ if(Math.random()<0.2 && bags.length<2) bags.push({x:Math.random()*(canvas.width-30),y:-40,r:15}); }
+// Апгрейд базы
+function upgradeBase(){
+if(coins>=500){
+coins-=500;
+baseLevel++;
+baseHP+=50;
+updateMenu();
+alert("База улучшена! HP +50");
+localStorage.setItem("baseHP", baseHP);
+localStorage.setItem("baseLevel", baseLevel);
+}else{
+alert("Недостаточно монет для апгрейда  базы!");
+ }
+}
+/* ===== СУНДУКИ ===== */
+function openChest(type){
+if(chestOpened[type]) { alert("Вы уже открыли этот сундук!"); return; }
+if(!taskData.t1 || !taskData.t2 || !taskData.t3){alert("Сначала выполните все задания!"); return;}
+let chance=Math.random()*100, reward=0;
+if(type==="normal"){if(chance<75) reward=35; else if(chance<90) reward=80; else if(chance<99) reward=120; else reward=200;}
+else if(type==="medium"){if(chance<80) reward=70; else if(chance<93) reward=100; else if(chance<98) reward=150; else reward=200;}
+else{if(chance<91) reward=100; else if(chance<96) reward=250; else if(chance<99) reward=500; else if(chance<99.99) reward=1000; else reward=100000;}
+coins+=reward;
+document.getElementById("chestResult").innerText=`Вы получили ${reward} монет!`;
+chestOpened[type]=true;
+updateMenu();
+}
 
-// Стрельба
+/* ===== СПАВН ЗОМБИ ===== */
+function spawnZombie(){zombies.push({x:Math.random()*(canvas.width-40),y:-40,hp:1});}
+
+/* ===== СПАВН МЕШКОВ ===== */
+function spawnBag() {
+    if(zombieKillCount % 10 !== 0) return; 
+    let rand = Math.random()*100;
+    let size, sticker;
+    if(rand < 1){ size=50; sticker="💰"; } // большой
+    else if(rand < 10){ size=35; sticker="💰"; } // средний
+    else { size=20; sticker="💰"; } // маленький
+    bags.push({x:Math.random()*(canvas.width-size), y:-size, size:size, sticker:sticker, coins:size*2});
+}
+
+/* ===== ВВОД ===== */
 canvas.addEventListener("mousedown", shoot);
+canvas.addEventListener("touchstart", shoot);
+
 function shoot(e){
-  if(state!=="game" || reloading) return;
-  let now=Date.now();
-  let weap = weapons[currentWeapon];
-  if(now-lastShot < weap.delay*1000) return;
-  lastShot = now;
-  for(let i=0;i<weap.bullets;i++){
-    let offset = weap.spread ? (Math.random()*20-10) : 0;
-    bullets.push({x:e.clientX+offset, y:canvas.height-80});
-  }
-  weap.ammo--;
-  if(weap.ammo<=0){ reloading = true; reloadStart = Date.now(); }
+if(state!=="game") return;
+const rect=canvas.getBoundingClientRect();
+let x=(e.clientX||e.touches[0].clientX)-rect.left;
+let y=canvas.height-90;
+let now=Date.now();
+let weapon=weapons[currentWeapon];
+
+if(isFriendGame){
+    if(playerSide==="left" && x>canvas.width/2) return;
+    if(playerSide==="right" && x<canvas.width/2) return;
 }
 
-// Снег
-let snowflakes=[];
-function spawnSnow(){
-  if(currentMode==="christmas"){
-    for(let i=0;i<1;i++) snowflakes.push({x:Math.random()*canvas.width,y:0,r:Math.random()*2+1});
-  }
+if(now-lastShot<weapon.delay*1000) return;
+lastShot=now;
+for(let i=0;i<weapon.bullets;i++){
+let offset=weapon.spread?(i-(weapon.bullets-1)/2)*12:0;
+bullets.push({x:x+offset,y:y,flash:5});
 }
-function drawSnow(){
-  ctx.fillStyle="white";
-  snowflakes.forEach((s,i)=>{
-    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
-    s.y += 1+s.r/2; if(s.y>canvas.height) snowflakes.splice(i,1);
-  });
 }
 
-// Игровой цикл
-function startGame(){
-  state="game"; zombies=[]; bullets=[]; chests=[]; bags=[];
-  kills=0; wave=1; waveTimer=waveTime; spawnRate=0.02; zombieSpeed=1.2; baseHP=250;
-  for(let w in weapons) weapons[w].ammo = weapons[w].maxAmmo;
-  reloading=false;
-
-  // Восстанавливаем позиции юнитов при старте игры
-  units.forEach(u=>{
-    if(u.xPos) { u.x = u.xPos; u.y = u.yPos; }
-    else u.x = null;
-  });
-
-  hideAll();
-}
-
-// Апгрейд юнитов
-function openUnitUpgrade() {
-  hideAll();
-  document.getElementById("unitUpgrade").classList.remove("hidden");
-  updateUnitUpgrade();
-}
-function updateUnitUpgrade() {
-  let html = "";
-  const unitNames = ["Человек с пистолетом","Человек с дробовиком","Человек с UMP"];
-  const unitPrices = [350,750,1500];
-  for(let i=0;i<unitNames.length;i++){
-    let count = units.filter(u=>u.index===i).length;
-    html += `<div style="margin:15px;">
-      <b>${unitNames[i]}</b> - ${unitPrices[i]}💰<br>
-      <button onclick="buyUnit(${i},${unitPrices[i]})">Купить</button>`;
-    if(count>0){
-      html += ` <button onclick="equipUnit(${i},${count})">Экипировать ${count>1?'двух':'одного'}</button>`;
-    }
-    html += `</div>`;
-  }
-  document.getElementById("unitList").innerHTML = html;
-}
-function buyUnit(index, price){
-  if(coins < price) return alert("Не хватает монет!");
-  coins -= price;
-  let weapon = index===0?"Pistol":index===1?"Shotgun":"UMP";
-  units.push({index:index, weapon:weapon, lastShot:0, x:null, y:null, xPos:null, yPos:null});
-  saveProgress(); updateUnitUpgrade(); updateMenu();
-}
-function equipUnit(index, count){
-  let toEquip = units.filter(u=>u.index===index && u.x===null);
-  if(toEquip.length===0) return alert("Все купленные юниты уже экипированы!");
-  toEquip.slice(0,count).forEach((u,i)=>{
-    u.x = canvas.width/2 - 12 + (i*30); // рядом с базой
-    u.y = canvas.height-80;
-    u.xPos = u.x; // сохраняем позицию
-    u.yPos = u.y;
-    u.lastShot = 0;
-  });
-  saveProgress();
-  updateUnitUpgrade();
-}
-
-// Обновление
+/* ===== ОБНОВЛЕНИЕ ===== */
 function update(){
-  if(state!=="game") return;
-  if(reloading && Date.now()-reloadStart>reloadTime){ reloading=false; weapons[currentWeapon].ammo = weapons[currentWeapon].maxAmmo; }
-  waveTimer -= 0.016;
-  if(Math.random()<spawnRate) spawnZombie();
-  spawnChest(); spawnBag(); spawnSnow();
-  if(waveTimer<=0){
-    wave++;
-    if(currentMode==="standard" && wave>5) endGame();
-    if(currentMode==="christmas" && wave>10) endGame();
-    waveTimer = waveTime;
-    zombieSpeed += 0.2;
-    spawnRate += 0.01;
-  }
+if(state!=="game") return;
+const now=Date.now(),delta=(now-lastTime)/1000; lastTime=now;
 
-  bullets.forEach(b=>b.y-=12);
-
-  for(let i=zombies.length-1;i>=0;i--){
-    let z = zombies[i], hit=false;
-    for(let j=bullets.length-1;j>=0;j--){
-      let b = bullets[j];
-      if(b.x>z.x && b.x<z.x+35 && b.y>z.y && b.y<z.y+35){
-        z.hp--; bullets.splice(j,1); hit=true;
-        if(z.hp<=0){ zombies.splice(i,1); kills++; totalKills++; coins++; saveProgress(); }
-        break;
-      }
-    }
-    if(!hit) z.y += zombieSpeed;
-    if(z.y>canvas.height-50){ baseHP-=20; zombies.splice(i,1); }
-  }
-
-  for(let i=chests.length-1;i>=0;i--){
-    let c = chests[i];
-    for(let j=bullets.length-1;j>=0;j--){
-      let b = bullets[j];
-      if(b.x>c.x && b.x<c.x+c.size && b.y>c.y && b.y<c.y+c.size){
-        coins+=5; bullets.splice(j,1); chests.splice(i,1); saveProgress(); break;
-      }
-    }
-    c.y+=1.5;
-  }
-
-  for(let i=bags.length-1;i>=0;i--){
-    let b = bags[i];
-    for(let j=bullets.length-1;j>=0;j--){
-      let bl = bullets[j];
-      if(Math.hypot(bl.x-(b.x+b.r), bl.y-(b.y+b.r))<b.r){
-        coins+=15; bullets.splice(j,1); bags.splice(i,1); saveProgress(); break;
-      }
-    }
-    b.y+=1.5;
-  }
-
-  // Юниты стреляют
-  units.forEach(u=>{
-    if(u.x===null) return;
-    let now=Date.now();
-    if(now-u.lastShot>=UNIT_FIRE_DELAY && zombies.length>0){
-      let target = zombies.reduce((a,b)=>Math.hypot(a.x-u.x,a.y-u.y)<Math.hypot(b.x-u.x,b.y-u.y)?a:b);
-      bullets.push({x:u.x+12, y:u.y, target:target});
-      u.lastShot=now;
-    }
-  });
-
-  if(baseHP<=0) endGame();
+if(currentMode!=="timer"){
+if(!wavePause){waveTimer-=delta;if(Math.random()<spawnRate) spawnZombie();}
+else{pauseTimer-=delta;if(pauseTimer<=0){wavePause=false; waveTimer=waveTime;}}
+if(waveTimer<=0 && !wavePause){wavePause=true; pauseTimer=3; wave++; spawnRate+=0.01; zombieSpeed+=0.3; if(wave>maxWaves) endGame();}
+}else{
+waveTimer-=delta;if(waveTimer<=0) endGame(); if(Math.random()<0.08) spawnZombie();
 }
 
-// Сохранение
-function saveProgress(){ 
-  localStorage.setItem("coins", coins); 
-  localStorage.setItem("totalKills", totalKills);
-  localStorage.setItem("units", JSON.stringify(units));
-}
-function endGame(){ state="over"; hideAll(); gameover.classList.remove("hidden"); updateMenu(); saveProgress(); }
+bullets.forEach(b=>b.y-=12);
 
-// Отрисовка
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle=currentMode==="christmas"?"#1e3f66":"#228B22";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  if(state!=="game") return;
-  ctx.fillStyle="red"; ctx.fillRect(0,canvas.height-50,canvas.width,50);
-  ctx.fillStyle="white"; ctx.font="20px Arial";
-  ctx.fillText(`🧱 База HP: ${baseHP}`,10,30);
-  ctx.fillText(`🌊 Волна ${wave} : ${Math.ceil(waveTimer)} сек`,10,60);
-  ctx.fillText(`💀 Убийства: ${kills}`,10,90);
-  if(reloading){ ctx.fillStyle="yellow"; ctx.font="30px Arial"; ctx.fillText("Перезарядка...",canvas.width/2-80,50); }
-  if(currentMode==="christmas") drawSnow();
-  ctx.fillStyle="yellow"; bullets.forEach(b=>ctx.fillRect(b.x-3,b.y,6,12));
-  ctx.fillStyle="green"; zombies.forEach(z=>ctx.fillRect(z.x,z.y,35,35));
-  ctx.fillStyle="orange"; chests.forEach(c=>ctx.fillRect(c.x,c.y,c.size,c.size));
-  ctx.fillStyle="yellow"; ctx.font="20px Arial"; bags.forEach(b=>{ctx.beginPath();ctx.arc(b.x+b.r,b.y+b.r,b.r,0,Math.PI*2);ctx.fill();ctx.fillText("💰",b.x+b.r-10,b.y+b.r+7);});
-  ctx.fillStyle="blue"; units.forEach(u=>{if(u.x!==null) ctx.fillRect(u.x,u.y,25,25);});
-  ctx.fillStyle="#0044cc"; ctx.fillRect(canvas.width-110,10,100,40);
-  ctx.fillStyle="white"; ctx.fillText("Меню",canvas.width-90,35);
+zombies.forEach((z,i)=>{
+bullets.forEach((b,j)=>{
+if(b.x>z.x && b.x<z.x+35 && b.y>z.y && b.y<z.y+35){
+z.hp--; bullets.splice(j,1);
+if(z.hp<=0){ 
+    zombies.splice(i,1); 
+    kills++; 
+    totalKills++; 
+    zombieKillCount++;
+    localStorage.setItem("totalKills", totalKills); 
+    coins++; 
+    spawnBag();
 }
-
-// Меню через клик
-canvas.addEventListener("click",(e)=>{
-  if(state==="game" && e.clientX>canvas.width-110 && e.clientX<canvas.width-10 && e.clientY>10 && e.clientY<50){
-    openMenu();
-  }
+}
+});
 });
 
-// Цикл игры
-function loop() {
-    update();  // обновляем логику игры
-    draw();    // рисуем всё на канвасе
-    requestAnimationFrame(loop); // повторяем цикл на следующем кадре
+zombies.forEach(z=>{
+z.y+=zombieSpeed;
+if(z.y>canvas.height-50){
+baseHP-=35;
+z.y=9999;
+kills++; totalKills++; zombieKillCount++; localStorage.setItem("totalKills", totalKills); coins++;
+spawnBag();
+localStorage.setItem("baseHP", baseHP);
+}
+});
+
+// Попадание по мешкам
+bags.forEach((b,i)=>{
+    b.y += 2; // падение
+    bullets.forEach((bu,j)=>{
+        let dx = bu.x - (b.x + b.size/2);
+        let dy = bu.y - (b.y + b.size/2);
+        let distance = Math.sqrt(dx*dx + dy*dy);
+        if(distance < b.size/2){
+            coins += b.coins;
+            localStorage.setItem("coins", coins);
+            bullets.splice(j,1);
+            bags.splice(i,1);
+        }
+    });
+});
+
+zombies=zombies.filter(z=>z.y<canvas.height);
+bullets=bullets.filter(b=>b.y>0);
+if(baseHP<=0) endGame();
 }
 
-// Запуск игрового цикла
+function endGame(){
+    state="over";
+    hideAll();
+    gameover.classList.remove("hidden");
+    // сохраняем уровень базы, но восстанавливаем HP до 200
+    localStorage.setItem("baseLevel", baseLevel);
+    baseHP = 200;  // восстановление HP после каждой игры
+    updateMenu();
+    canvas.style.pointerEvents="none";
+}
+
+/* ===== ОТРИСОВКА ===== */
+let snow=[];
+for(let i=0;i<200;i++){snow.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,vy:0.3+Math.random()*0.2});}
+
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(state!=="game") return;
+
+    // фон
+    ctx.fillStyle=currentMode==="christmas"?"#87CEEB":"#228B22";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // снег для рождественского режима
+    if(currentMode==="christmas"){
+        ctx.fillStyle="white";
+        snow.forEach(s=>{
+            ctx.beginPath();ctx.arc(s.x,s.y,3,0,Math.PI*2);ctx.fill();
+            s.y+=s.vy;if(s.y>canvas.height) s.y=0;
+        });
+    }
+
+    // база
+    ctx.fillStyle="red";
+    ctx.fillRect(0,canvas.height-50,canvas.width,50);
+
+    // HUD
+    ctx.fillStyle="white";
+    ctx.font="20px Arial";
+    ctx.fillText(`💀 Убито: ${kills}`,10,30);
+    ctx.fillText(`💰 Монеты: ${coins}`,10,60);
+    ctx.fillText(`🧱 База HP: ${baseHP}`,10,90);
+    if(currentMode!=="timer") ctx.fillText(`🌊 ${wave} волна: ${Math.ceil(waveTimer)} сек`,10,120);
+    else ctx.fillText(`⏱ Таймер: ${Math.ceil(waveTimer)} сек`,10,120);
+
+    // пули
+    ctx.fillStyle="yellow";
+    bullets.forEach(b=>{
+        ctx.fillRect(b.x-3,b.y,6,12);
+        if(b.flash && b.flash>0){ ctx.fillStyle="orange"; ctx.fillRect(b.x-6,b.y-6,12,12); b.flash--; ctx.fillStyle="yellow"; }
+    });
+
+    // зомби
+    ctx.fillStyle="green";
+    zombies.forEach(z=>ctx.fillRect(z.x,z.y,35,35));
+
+    // мешки и рюкзаки стикерами
+    bags.forEach(b=>{
+        ctx.fillStyle="yellow";
+        ctx.font=`${b.size}px Arial`;
+        ctx.fillText(b.sticker, b.x, b.y + b.size);
+    });
+
+    // линия разделения для игры с другом
+    if(isFriendGame && friendConnected){
+        ctx.strokeStyle="white";
+        ctx.lineWidth=4;
+        ctx.beginPath();
+        ctx.moveTo(canvas.width/2,0);
+        ctx.lineTo(canvas.width/2,canvas.height);
+        ctx.stroke();
+    }
+
+    // кнопка меню на канвасе
+    ctx.fillStyle="#0066ff";
+    ctx.fillRect(canvas.width-90,10,80,35);
+    ctx.fillStyle="white";
+    ctx.fillText("Меню",canvas.width-70,35);
+}
+
+/* ===== КНОПКА МЕНЮ НА КАНВАСЕ ===== */
+canvas.addEventListener("click",e=>{
+    if(e.clientX>canvas.width-90&&e.clientX<canvas.width-10&&e.clientY>10&&e.clientY<45) openMenu();
+});
+
+/* ===== ЦИКЛ ===== */
+function loop(){update();draw();requestAnimationFrame(loop);}
 loop();
 </script>
 </body>
